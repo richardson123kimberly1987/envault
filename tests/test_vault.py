@@ -74,6 +74,12 @@ def test_list_keys(tmp_vault):
     assert sorted(tmp_vault.list_keys("staging")) == ["A", "B"]
 
 
+def test_list_keys_missing_env_returns_empty(tmp_vault):
+    """list_keys on a non-existent environment should return an empty list."""
+    tmp_vault.load()
+    assert tmp_vault.list_keys("nonexistent") == []
+
+
 def test_list_envs(tmp_vault):
     tmp_vault.load()
     tmp_vault.set_secret("dev", "X", "1")
@@ -87,6 +93,12 @@ def test_export_env(tmp_vault):
     tmp_vault.set_secret("dev", "BAZ", "qux")
     exported = tmp_vault.export_env("dev")
     assert exported == {"FOO": "bar", "BAZ": "qux"}
+
+
+def test_export_env_missing_env_returns_empty(tmp_vault):
+    """export_env on a non-existent environment should return an empty dict."""
+    tmp_vault.load()
+    assert tmp_vault.export_env("nonexistent") == {}
 
 
 def test_load_wrong_passphrase_raises(tmp_vault):
