@@ -1,95 +1,112 @@
-"""CLI entry point for envault."""
+"""CLI entry-point for envault."""
 
 from __future__ import annotations
 
+import json
+import os
 import sys
-from pathlib import Path
 
 import click
 
-from envault.vault import Vault, VaultError
 from envault.audit import AuditLog
+from envault.search import SearchError, search_secrets
+from envault.vault import Vault, VaultError
 
-DEFAULT_VAULT = Path(".envault/vault.json")
-DEFAULT_AUDIT_LOG = Path(".envault/audit.log")
-
-
-def _get_vault(vault_path: Path, passphrase: str) -> Vault:
-    return Vault(vault_path, passphrase)
+_DEFAULT_VAULT = os.environ.get("ENVAULT_VAULT", "vault.enc")
+_DEFAULT_AUDIT = os.environ.get("ENVAULT_AUDIT", "audit.log")
 
 
-def _get_audit(audit_path: Path) -> AuditLog:
-    return AuditLog(audit_path)
+def _get_vault(path: str, passphrase: str) -> Vault:
+    return Vault(path, passphrase)
+
+
+def _get_audit(path: str) -> AuditLog:
+    return AuditLog(path)
 
 
 @click.group()
-@click.option("--vault", default=str(DEFAULT_VAULT), show_default=True, help="Path to vault file.")
-@click.option("--audit-log", default=str(DEFAULT_AUDIT_LOG), show_default=True, help="Path to audit log.")
-@click.pass_context
-def cli(ctx: click.Context, vault: str, audit_log: str) -> None:
-    """envault — secure environment variable management."""
-    ctx.ensure_object(dict)
-    ctx.obj["vault_path"] = Path(vault)
-    ctx.obj["audit_path"] = Path(audit_log)
+def cli() -> None:
+    """envault — secure environment secret manager."""
 
 
 @cli.command("set")
+@click.argument("environment")
 @click.argument("key")
 @click.argument("value")
-@click.option("--env", default="default", show_default=True, help="Target environment.")
-@click.option("--passphrase", prompt=True, hide_input=True)
-@click.pass_context
-def set_secret(ctx: click.Context, key: str, value: str, env: str, passphrase: str) -> None:
-    """Set a secret KEY to VALUE in the vault."""
-    vault = _get_vault(ctx.obj["vault_path"], passphrase)
-    vault.set(key, value, environment=env)
-    vault.save()
-    _get_audit(ctx.obj["audit_path"]).record("set", key, env)
-    click.echo(f"Secret '{key}' set in environment '{env}'.")
+@click.option("--vault", default=_DEFAULT_VAULT, show_default=True)
+@click.option("--passphrase", envvar="ENVAULT_PASSPHRASE", prompt=True, hide_input=True)
+@click.option("--audit", default=_DEFAULT_AUDIT, show_default=True)
+def set_secret(environment, key, value, vault, passphrase, audit):
+    """Set a secret KEY=VALUE in ENVIRONMENT."""
+    try:
+        v = _get_vault(vault, passphrase)
+        v.set(environment, key, value)
+        v.save()
+        _get_audit(audit).record("set", environment=environment, key=key)
+        click.echo(f"Set {key} in {environment}.")
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
 
 
 @cli.command("get")
+@click.argument("environment")
 @click.argument("key")
-@click.option("--env", default="default", show_default=True)
-@click.option("--passphrase", prompt=True, hide_input=True)
-@click.pass_context
-def get_secret(ctx: click.Context, key: str, env: str, passphrase: str) -> None:
-    """Get a secret KEY from the vault."""
-    vault = _get_vault(ctx.obj["vault_path"], passphrase)
-    value = vault.get(key, environment=env)
-    if value is None:
-        click.echo(f"Secret '{key}' not found in environment '{env}'.", err=True)
+@click.option("--vault", default=_DEFAULT_VAULT, show_default=True)
+@click.option("--passphrase", envvar="ENVAULT_PASSPHRASE", prompt=True, hide_input=True)
+def get_secret(environment, key, vault, passphrase):
+    """Get a secret KEY from ENVIRONMENT."""
+    try:
+        v = _get_vault(vault, passphrase)
+        value = v.get(environment, key)
+        if value is None:
+            click.echo(f"Key '{key}' not found in {environment}.", err=True)
+            sys.exit(1)
+        click.echo(value)
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
-    _get_audit(ctx.obj["audit_path"]).record("get", key, env)
-    click.echo(value)
 
 
-@cli.command("delete")
-@click.argument("key")
-@click.option("--env", default="default", show_default=True)
-@click.option("--passphrase", prompt=True, hide_input=True)
-@click.pass_context
-def delete_secret(ctx: click.Context, key: str, env: str, passphrase: str) -> None:
-    """Delete a secret KEY from the vault."""
-    vault = _get_vault(ctx.obj["vault_path"], passphrase)
-    vault.delete(key, environment=env)
-    vault.save()
-    _get_audit(ctx.obj["audit_path"]).record("delete", key, env)
-    click.echo(f"Secret '{key}' deleted from environment '{env}'.")
+@cli.command("list")
+@click.argument("environment")
+@click.option("--vault", default=_DEFAULT_VAULT, show_default=True)
+@click.option("--passphrase", envvar="ENVAULT_PASSPHRASE", prompt=True, hide_input=True)
+def list_secrets(environment, vault, passphrase):
+    """List all secret keys in ENVIRONMENT."""
+    try:
+        v = _get_vault(vault, passphrase)
+        keys = v.list_secrets(environment)
+        for k in sorted(keys):
+            click.echo(k)
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
 
 
-@cli.command("audit")
-@click.option("--env", default=None, help="Filter by environment.")
-@click.option("--event", default=None, help="Filter by event type.")
-@click.option("--audit-log", default=str(DEFAULT_AUDIT_LOG), show_default=True)
-@click.pass_context
-def show_audit(ctx: click.Context, env: str, event: str, audit_log: str) -> None:
-    """Display the audit log."""
-    log = AuditLog(Path(audit_log))
-    entries = log.read(environment=env, event=event)
-    if not entries:
-        click.echo("No audit entries found.")
-        return
-    for entry in entries:
-        meta = f" {entry.metadata}" if entry.metadata else ""
-        click.echo(f"[{entry.timestamp}] {entry.actor} {entry.event} {entry.key} ({entry.environment}){meta}")
+@cli.command("search")
+@click.argument("pattern")
+@click.option("--environment", default=None, help="Restrict to a single environment.")
+@click.option("--regex", "use_regex", is_flag=True, default=False, help="Treat PATTERN as regex.")
+@click.option("--vault", default=_DEFAULT_VAULT, show_default=True)
+@click.option("--passphrase", envvar="ENVAULT_PASSPHRASE", prompt=True, hide_input=True)
+@click.option("--json", "as_json", is_flag=True, default=False, help="Output as JSON.")
+def search(pattern, environment, use_regex, vault, passphrase, as_json):
+    """Search for secrets matching PATTERN (glob by default)."""
+    try:
+        v = _get_vault(vault, passphrase)
+        results = search_secrets(v, pattern, environment=environment, use_regex=use_regex)
+        if not results:
+            click.echo("No secrets matched.")
+            return
+        if as_json:
+            click.echo(json.dumps([r.to_dict() for r in results], indent=2))
+        else:
+            for r in results:
+                click.echo(f"{r.environment}\t{r.key}\tv{r.version}")
+    except SearchError as exc:
+        click.echo(f"Search error: {exc}", err=True)
+        sys.exit(1)
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
