@@ -98,3 +98,11 @@ def test_lint_multiple_issues_same_secret():
     checks = {i.check for i in result.issues}
     assert "weak_value" in checks
     assert "naming_convention" in checks
+
+
+def test_lint_issue_environment_recorded_correctly():
+    """Ensure each issue records the environment it was found in."""
+    vault = _FakeVault({"staging": {"MY_KEY": ""}, "prod": {"API_KEY": "xK92!mPqR#7z"}})
+    result = lint_secrets(vault)
+    for issue in result.issues:
+        assert issue.environment == "staging"
