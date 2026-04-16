@@ -1,116 +1,93 @@
-"""Tests for envault.merge."""
-from __future__ import annotations
-
 import pytest
+from envault.merge import merge_environments, MergeError, MergeResult
 
-from envault.merge import MergeError, MergeResult, merge_environments
-
-
-# ---------------------------------------------------------------------------
-# Fakes
-# ---------------------------------------------------------------------------
 
 class _FakeEntry:
-    def __init__(self, value: str):
+    def __init__(self, value):
         self.value = value
+        self._data = {"value": value, "version": 1}
 
     def to_dict(self):
-        return {"value": self.value}
+        return dict(self._data)
 
 
 class _FakeVault:
-    def __init__(self, envs: dict):
-        # envs: {env_name: {key: value}}
-        self._data: dict[str, dict[str, str]] = {
-            env: dict(secrets) for env, secrets in envs.items()
+    def __init__(self, data):
+        # data: {env: {key: value_str}}
+        self._data = {
+            env: {k: _FakeEntry(v) for k, v in secrets.items()}
+            for env, secrets in data.items()
         }
+        self._saved = []
 
     def list_environments(self):
         return list(self._data.keys())
 
-    def list_secrets(self, env: str):
+    def list_secrets(self, env):
         return list(self._data.get(env, {}).keys())
 
-    def get_secret(self, env: str, key: str):
-        val = self._data.get(env, {}).get(key)
-        return _FakeEntry(val) if val is not None else None
+    def get_secret(self, env, key):
+        return self._data.get(env, {}).get(key)
 
-    def set_secret(self, env: str, key: str, value: str):
-        self._data.setdefault(env, {})[key] = value
+    def set_secret(self, env, key, value):
+        if env not in self._data:
+            self._data[env] = {}
+        self._data[env][key] = _FakeEntry(value)
 
+    def save(self):
+        self._saved.append(True)
 
-# ---------------------------------------------------------------------------
-# MergeResult.to_dict
-# ---------------------------------------------------------------------------
 
 def test_merge_result_to_dict():
-    r = MergeResult("dev", "staging", merged=["A"], skipped=["B"], overwritten=["C"])
+    r = MergeResult("a", "b", merged=1, skipped=0, conflicts=0, details={"X": "merged"})
     d = r.to_dict()
-    assert d["source_env"] == "dev"
-    assert d["target_env"] == "staging"
-    assert d["merged"] == ["A"]
-    assert d["skipped"] == ["B"]
-    assert d["overwritten"] == ["C"]
+    assert d["source"] == "a"
+    assert d["merged"] == 1
+    assert d["details"]["X"] == "merged"
 
 
-# ---------------------------------------------------------------------------
-# Happy-path merges
-# ---------------------------------------------------------------------------
-
-def test_merge_new_keys():
-    vault = _FakeVault({"dev": {"DB": "dev-db", "API": "dev-api"}, "staging": {}})
-    result = merge_environments(vault, "dev", "staging")
-    assert set(result.merged) == {"DB", "API"}
-    assert result.skipped == []
-    assert result.overwritten == []
-    assert vault._data["staging"]["DB"] == "dev-db"
+def test_merge_copies_missing_keys():
+    vault = _FakeVault({"staging": {"A": "val_a", "B": "val_b"}, "production": {}})
+    result = merge_environments(vault, "staging", "production", strategy="keep")
+    assert result.merged == 2
+    assert vault.get_secret("production", "A").value == "val_a"
 
 
-def test_merge_skips_existing_without_overwrite():
-    vault = _FakeVault({"dev": {"DB": "dev-db"}, "staging": {"DB": "staging-db"}})
-    result = merge_environments(vault, "dev", "staging", overwrite=False)
-    assert result.skipped == ["DB"]
-    assert result.merged == []
-    assert vault._data["staging"]["DB"] == "staging-db"  # unchanged
+def test_merge_keep_strategy_preserves_existing():
+    vault = _FakeVault(
+        {"staging": {"A": "new"}, "production": {"A": "old"}}
+    )
+    result = merge_environments(vault, "staging", "production", strategy="keep")
+    assert vault.get_secret("production", "A").value == "old"
+    assert result.skipped == 1
+    assert result.conflicts == 1
 
 
-def test_merge_overwrites_existing_when_flag_set():
-    vault = _FakeVault({"dev": {"DB": "dev-db"}, "staging": {"DB": "staging-db"}})
-    result = merge_environments(vault, "dev", "staging", overwrite=True)
-    assert result.overwritten == ["DB"]
-    assert vault._data["staging"]["DB"] == "dev-db"
+def test_merge_overwrite_strategy_replaces_existing():
+    vault = _FakeVault(
+        {"staging": {"A": "new"}, "production": {"A": "old"}}
+    )
+    result = merge_environments(vault, "staging", "production", strategy="overwrite")
+    assert vault.get_secret("production", "A").value == "new"
+    assert result.merged == 1
+    assert result.conflicts == 1
 
 
-def test_merge_with_key_filter():
-    vault = _FakeVault({"dev": {"DB": "x", "API": "y"}, "staging": {}})
-    result = merge_environments(vault, "dev", "staging", keys=["DB"])
-    assert result.merged == ["DB"]
-    assert "API" not in vault._data["staging"]
+def test_merge_skip_strategy_skips_all_conflicts():
+    vault = _FakeVault(
+        {"staging": {"A": "x", "B": "y"}, "production": {"A": "old"}}
+    )
+    result = merge_environments(vault, "staging", "production", strategy="skip")
+    assert result.skipped >= 1
 
-
-# ---------------------------------------------------------------------------
-# Error cases
-# ---------------------------------------------------------------------------
 
 def test_merge_missing_source_raises():
-    vault = _FakeVault({"staging": {}})
-    with pytest.raises(MergeError, match="Source environment"):
-        merge_environments(vault, "dev", "staging")
-
-
-def test_merge_missing_target_raises():
-    vault = _FakeVault({"dev": {"DB": "x"}})
-    with pytest.raises(MergeError, match="Target environment"):
-        merge_environments(vault, "dev", "prod")
+    vault = _FakeVault({"production": {}})
+    with pytest.raises(MergeError, match="source"):
+        merge_environments(vault, "staging", "production")
 
 
 def test_merge_same_env_raises():
-    vault = _FakeVault({"dev": {"DB": "x"}})
-    with pytest.raises(MergeError, match="different"):
-        merge_environments(vault, "dev", "dev")
-
-
-def test_merge_missing_key_in_source_raises():
-    vault = _FakeVault({"dev": {"DB": "x"}, "staging": {}})
-    with pytest.raises(MergeError, match="Keys not found"):
-        merge_environments(vault, "dev", "staging", keys=["MISSING"])
+    vault = _FakeVault({"staging": {"A": "v"}})
+    with pytest.raises(MergeError):
+        merge_environments(vault, "staging", "staging")
