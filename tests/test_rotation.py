@@ -66,6 +66,14 @@ def test_rotate_secret_missing_key_raises():
         rotate_secret(vault, "MISSING", "value")
 
 
+def test_rotate_secret_same_value_still_updates():
+    """Rotating to the same value should succeed and record previous version."""
+    vault = _FakeVault({("KEY", "default"): "same"})
+    result = rotate_secret(vault, "KEY", "same")
+    assert vault.get("KEY").value == "same"
+    assert result["previous_version"]["value"] == "same"
+
+
 # ---------------------------------------------------------------------------
 # rotate_all
 # ---------------------------------------------------------------------------
