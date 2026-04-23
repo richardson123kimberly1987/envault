@@ -106,6 +106,6 @@ def test_load_wrong_passphrase_raises(tmp_vault):
     tmp_vault.set_secret("prod", "KEY", "val")
     tmp_vault.save()
 
-    bad_vault = Vault(path=tmp_vault.path, passphrase="wrong-passphrase")
+    vault2 = Vault(path=tmp_vault.path, passphrase="wrong-passphrase")
     with pytest.raises(VaultError):
-        bad_vault.load()
+        vault2.load()
