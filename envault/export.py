@@ -53,11 +53,26 @@ def export_shell(vault: "Vault", environment: str) -> str:
 
 
 def export_secrets(vault: "Vault", environment: str, fmt: str) -> str:
-    """Dispatch export to the requested format."""
+    """Dispatch export to the requested format.
+
+    Args:
+        vault: The Vault instance to read secrets from.
+        environment: The environment name to export.
+        fmt: Output format — one of 'dotenv', 'json', or 'shell'.
+
+    Returns:
+        A string containing the exported secrets in the requested format.
+
+    Raises:
+        ExportError: If the requested format is not supported or the
+            environment does not exist in the vault.
+    """
     if fmt not in SUPPORTED_FORMATS:
         raise ExportError(
             f"Unsupported format '{fmt}'. Choose from: {', '.join(SUPPORTED_FORMATS)}"
         )
+    if not vault.environment_exists(environment):
+        raise ExportError(f"Environment '{environment}' not found in vault.")
     if fmt == "dotenv":
         return export_dotenv(vault, environment)
     if fmt == "json":
