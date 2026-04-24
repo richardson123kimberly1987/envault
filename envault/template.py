@@ -27,6 +27,23 @@ class RenderResult:
         }
 
 
+def list_placeholders(template: str) -> list[str]:
+    """Return a deduplicated list of placeholder key names found in *template*.
+
+    Useful for pre-flight checks — callers can verify that all required secrets
+    exist before attempting a full render.
+
+    Example
+    -------
+    >>> list_placeholders("Hello {{ NAME }}, your token is {{ TOKEN:none }}")
+    ['NAME', 'TOKEN']
+    """
+    seen: dict[str, None] = {}  # ordered set via insertion-ordered dict
+    for match in _PLACEHOLDER_RE.finditer(template):
+        seen[match.group(1)] = None
+    return list(seen)
+
+
 def render_template(
     template: str,
     vault,
