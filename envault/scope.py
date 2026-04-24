@@ -25,11 +25,17 @@ class ScopeResult:
         }
 
 
-def add_scope(vault, environment: str, secret: str, scope: str) -> ScopeResult:
-    """Add *scope* to the named secret's metadata."""
+def _get_entry_or_raise(vault, environment: str, secret: str):
+    """Fetch a secret entry from the vault, raising ScopeError if not found."""
     entry = vault.get_secret(environment, secret)
     if entry is None:
         raise ScopeError(f"Secret '{secret}' not found in environment '{environment}'")
+    return entry
+
+
+def add_scope(vault, environment: str, secret: str, scope: str) -> ScopeResult:
+    """Add *scope* to the named secret's metadata."""
+    entry = _get_entry_or_raise(vault, environment, secret)
 
     data = entry.to_dict()
     scopes: List[str] = data.get("scopes") or []
@@ -44,9 +50,7 @@ def add_scope(vault, environment: str, secret: str, scope: str) -> ScopeResult:
 
 def remove_scope(vault, environment: str, secret: str, scope: str) -> ScopeResult:
     """Remove *scope* from the named secret's metadata."""
-    entry = vault.get_secret(environment, secret)
-    if entry is None:
-        raise ScopeError(f"Secret '{secret}' not found in environment '{environment}'")
+    entry = _get_entry_or_raise(vault, environment, secret)
 
     data = entry.to_dict()
     scopes: List[str] = data.get("scopes") or []
@@ -62,9 +66,7 @@ def remove_scope(vault, environment: str, secret: str, scope: str) -> ScopeResul
 
 def list_scopes(vault, environment: str, secret: str) -> ScopeResult:
     """Return the scopes currently assigned to a secret."""
-    entry = vault.get_secret(environment, secret)
-    if entry is None:
-        raise ScopeError(f"Secret '{secret}' not found in environment '{environment}'")
+    entry = _get_entry_or_raise(vault, environment, secret)
 
     scopes: List[str] = (entry.to_dict().get("scopes") or [])
     return ScopeResult(secret=secret, environment=environment, scopes=scopes, action="listed")
