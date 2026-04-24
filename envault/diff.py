@@ -82,6 +82,26 @@ def diff_environments(
     return results
 
 
+def filter_diffs(
+    diffs: List[SecretDiff],
+    *,
+    statuses: Optional[List[str]] = None,
+) -> List[SecretDiff]:
+    """Filter a list of SecretDiff objects by status.
+
+    Args:
+        diffs: A list of SecretDiff objects to filter.
+        statuses: A list of statuses to include (e.g. ['added', 'removed']).
+                  If None or empty, all diffs are returned.
+
+    Returns:
+        A filtered list of SecretDiff objects.
+    """
+    if not statuses:
+        return diffs
+    return [d for d in diffs if d.status in statuses]
+
+
 def format_diff(diffs: List[SecretDiff], *, show_values: bool = False) -> str:
     """Render a list of SecretDiff objects as a human-readable string."""
     if not diffs:
