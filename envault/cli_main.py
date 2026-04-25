@@ -1,4 +1,4 @@
-"""Entry point that assembles all CLI command groups for envault."""
+"""Main CLI entry point — registers all command groups."""
 from __future__ import annotations
 
 import click
@@ -31,34 +31,36 @@ from envault.cli_quota import quota_group
 from envault.cli_namespace import namespace_group
 from envault.cli_cascade import cascade_group
 from envault.cli_webhook import webhook_group
+from envault.cli_lifecycle import lifecycle_group
 
-cli.add_command(snapshot_group, "snapshot")
-cli.add_command(tag_group, "tag")
-cli.add_command(access_group, "access")
-cli.add_command(expiry_group, "expiry")
-cli.add_command(template_group, "template")
-cli.add_command(lint_group, "lint")
-cli.add_command(history_group, "history")
-cli.add_command(compare_group, "compare")
-cli.add_command(rename_group, "rename")
-cli.add_command(merge_group, "merge")
-cli.add_command(promote_group, "promote")
-cli.add_command(pin_group, "pin")
-cli.add_command(validate_group, "validate")
-cli.add_command(notify_group, "notify")
-cli.add_command(lock_group, "lock")
-cli.add_command(scope_group, "scope")
-cli.add_command(watch_group, "watch")
-cli.add_command(group_group, "group")
-cli.add_command(dependency_group, "dependency")
-cli.add_command(pipeline_group, "pipeline")
-cli.add_command(inherit_group, "inherit")
-cli.add_command(checkpoint_group, "checkpoint")
-cli.add_command(label_group, "label")
-cli.add_command(quota_group, "quota")
-cli.add_command(namespace_group, "namespace")
-cli.add_command(cascade_group, "cascade")
-cli.add_command(webhook_group, "webhook")
+cli.add_command(snapshot_group)
+cli.add_command(tag_group)
+cli.add_command(access_group)
+cli.add_command(expiry_group)
+cli.add_command(template_group)
+cli.add_command(lint_group)
+cli.add_command(history_group)
+cli.add_command(compare_group)
+cli.add_command(rename_group)
+cli.add_command(merge_group)
+cli.add_command(promote_group)
+cli.add_command(pin_group)
+cli.add_command(validate_group)
+cli.add_command(notify_group)
+cli.add_command(lock_group)
+cli.add_command(scope_group)
+cli.add_command(watch_group)
+cli.add_command(group_group)
+cli.add_command(dependency_group)
+cli.add_command(pipeline_group)
+cli.add_command(inherit_group)
+cli.add_command(checkpoint_group)
+cli.add_command(label_group)
+cli.add_command(quota_group)
+cli.add_command(namespace_group)
+cli.add_command(cascade_group)
+cli.add_command(webhook_group)
+cli.add_command(lifecycle_group)
 
 if __name__ == "__main__":  # pragma: no cover
     cli()
