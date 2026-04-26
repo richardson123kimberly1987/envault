@@ -49,6 +49,7 @@ def render_cmd(
 @click.option("--vault-file", default="vault.json", show_default=True)
 @click.option("--passphrase", prompt=True, hide_input=True)
 @click.option("--strict", is_flag=True, default=False)
+@click.option("--show-missing", is_flag=True, default=False, help="Print missing keys to stderr.")
 @click.option("--output", "-o", default="-", help="Output file (default: stdout).")
 def render_file_cmd(
     template_file: str,
@@ -56,6 +57,7 @@ def render_file_cmd(
     vault_file: str,
     passphrase: str,
     strict: bool,
+    show_missing: bool,
     output: str,
 ) -> None:
     """Render a template FILE, writing the result to OUTPUT."""
@@ -75,3 +77,6 @@ def render_file_cmd(
         with open(output, "w", encoding="utf-8") as fh:
             fh.write(result.rendered)
         click.echo(f"Written to {output}")
+
+    if show_missing and result.missing:
+        click.echo(f"Missing secrets: {', '.join(result.missing)}", err=True)
